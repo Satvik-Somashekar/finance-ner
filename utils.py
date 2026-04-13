@@ -1,9 +1,11 @@
+#!/usr/bin/env python3
+# Modified by Satvik Somashekar - Python 3 port
+
 import os
 import re
 import codecs
 import numpy as np
 import theano
-
 
 models_path = "./models"
 eval_path = "./evaluation"
@@ -12,9 +14,6 @@ eval_script = os.path.join(eval_path, "conlleval")
 
 
 def get_name(parameters):
-    """
-    Generate a model name from its parameters.
-    """
     l = []
     for k, v in parameters.items():
         if type(v) is str and "/" in v:
@@ -26,10 +25,6 @@ def get_name(parameters):
 
 
 def set_values(name, param, pretrained):
-    """
-    Initialize a network parameter with pretrained values.
-    We check that sizes are compatible.
-    """
     param_value = param.get_value()
     if pretrained.size != param_value.size:
         raise Exception(
@@ -42,11 +37,8 @@ def set_values(name, param, pretrained):
 
 
 def shared(shape, name):
-    """
-    Create a shared object of a numpy array.
-    """
     if len(shape) == 1:
-        value = np.zeros(shape)  # bias are initialized with zeros
+        value = np.zeros(shape)
     else:
         drange = np.sqrt(6. / (np.sum(shape)))
         value = drange * np.random.uniform(low=-1.0, high=1.0, size=shape)
@@ -54,9 +46,6 @@ def shared(shape, name):
 
 
 def create_dico(item_list):
-    """
-    Create a dictionary of items from a list of list of items.
-    """
     assert type(item_list) is list
     dico = {}
     for items in item_list:
@@ -69,10 +58,6 @@ def create_dico(item_list):
 
 
 def create_mapping(dico):
-    """
-    Create a mapping (item to ID / ID to item) from a dictionary.
-    Items are ordered by decreasing frequency.
-    """
     sorted_items = sorted(dico.items(), key=lambda x: (-x[1], x[0]))
     id_to_item = {i: v[0] for i, v in enumerate(sorted_items)}
     item_to_id = {v: k for k, v in id_to_item.items()}
@@ -80,17 +65,10 @@ def create_mapping(dico):
 
 
 def zero_digits(s):
-    """
-    Replace every digit in a string by a zero.
-    """
-    return re.sub('\d', '0', s)
+    return re.sub(r'\d', '0', s)              # CHANGED: raw string r'\d'
 
 
 def iob2(tags):
-    """
-    Check that tags have a valid IOB format.
-    Tags in IOB1 format are converted to IOB2.
-    """
     for i, tag in enumerate(tags):
         if tag == 'O':
             continue
@@ -99,19 +77,16 @@ def iob2(tags):
             return False
         if split[0] == 'B':
             continue
-        elif i == 0 or tags[i - 1] == 'O':  # conversion IOB1 to IOB2
+        elif i == 0 or tags[i - 1] == 'O':
             tags[i] = 'B' + tag[1:]
         elif tags[i - 1][1:] == tag[1:]:
             continue
-        else:  # conversion IOB1 to IOB2
+        else:
             tags[i] = 'B' + tag[1:]
     return True
 
 
 def iob_iobes(tags):
-    """
-    IOB -> IOBES
-    """
     new_tags = []
     for i, tag in enumerate(tags):
         if tag == 'O':
@@ -134,9 +109,6 @@ def iob_iobes(tags):
 
 
 def iobes_iob(tags):
-    """
-    IOBES -> IOB
-    """
     new_tags = []
     for i, tag in enumerate(tags):
         if tag.split('-')[0] == 'B':
@@ -155,14 +127,10 @@ def iobes_iob(tags):
 
 
 def iob_ranges(tags):
-    """
-    IOB -> Ranges
-    """
     ranges = []
     def check_if_closing_range():
         if i == len(tags)-1 or tags[i+1].split('-')[0] == 'O':
             ranges.append((begin, i, type))
-    
     for i, tag in enumerate(tags):
         if tag.split('-')[0] == 'O':
             pass
@@ -176,9 +144,6 @@ def iob_ranges(tags):
 
 
 def insert_singletons(words, singletons, p=0.5):
-    """
-    Replace singletons by the unknown word with a probability p.
-    """
     new_words = []
     for word in words:
         if word in singletons and np.random.uniform() < p:
@@ -189,15 +154,6 @@ def insert_singletons(words, singletons, p=0.5):
 
 
 def pad_word_chars(words):
-    """
-    Pad the characters of the words in a sentence.
-    Input:
-        - list of lists of ints (list of words, a word being a list of char indexes)
-    Output:
-        - padded list of lists of ints
-        - padded list of lists of ints (where chars are reversed)
-        - list of ints corresponding to the index of the last character of each word
-    """
     max_length = max([len(word) for word in words])
     char_for = []
     char_rev = []
@@ -211,10 +167,6 @@ def pad_word_chars(words):
 
 
 def create_input(data, parameters, add_label, singletons=None):
-    """
-    Take sentence data and return an input for
-    the training or the evaluation function.
-    """
     words = data['words']
     chars = data['chars']
     if singletons is not None:
@@ -239,9 +191,6 @@ def create_input(data, parameters, add_label, singletons=None):
 
 def evaluate(parameters, f_eval, raw_sentences, parsed_sentences,
              id_to_tag, dictionary_tags):
-    """
-    Evaluate current model using CoNLL script.
-    """
     n_tags = len(id_to_tag)
     predictions = []
     count = np.zeros((n_tags, n_tags), dtype=np.int32)
@@ -265,7 +214,6 @@ def evaluate(parameters, f_eval, raw_sentences, parsed_sentences,
             count[y_real, y_pred] += 1
         predictions.append("")
 
-    # Write predictions to disk and run CoNLL script externally
     eval_id = np.random.randint(1000000, 2000000)
     output_path = os.path.join(eval_temp, "eval.%i.output" % eval_id)
     scores_path = os.path.join(eval_temp, "eval.%i.scores" % eval_id)
@@ -273,31 +221,23 @@ def evaluate(parameters, f_eval, raw_sentences, parsed_sentences,
         f.write("\n".join(predictions))
     os.system("%s < %s > %s" % (eval_script, output_path, scores_path))
 
-    # CoNLL evaluation results
     eval_lines = [l.rstrip() for l in codecs.open(scores_path, 'r', 'utf8')]
     for line in eval_lines:
-        print line
+        print(line)                            # CHANGED: print()
 
-    # Remove temp files
-    # os.remove(output_path)
-    # os.remove(scores_path)
-
-    # Confusion matrix with accuracy for each tag
-    print ("{: >2}{: >7}{: >7}%s{: >9}" % ("{: >7}" * n_tags)).format(
+    print(("{: >2}{: >7}{: >7}%s{: >9}" % ("{: >7}" * n_tags)).format(   # CHANGED: print()
         "ID", "NE", "Total",
-        *([id_to_tag[i] for i in xrange(n_tags)] + ["Percent"])
-    )
-    for i in xrange(n_tags):
-        print ("{: >2}{: >7}{: >7}%s{: >9}" % ("{: >7}" * n_tags)).format(
+        *([id_to_tag[i] for i in range(n_tags)] + ["Percent"])  # CHANGED: xrange → range
+    ))
+    for i in range(n_tags):                    # CHANGED: xrange → range
+        print(("{: >2}{: >7}{: >7}%s{: >9}" % ("{: >7}" * n_tags)).format(  # CHANGED: print()
             str(i), id_to_tag[i], str(count[i].sum()),
-            *([count[i][j] for j in xrange(n_tags)] +
+            *([count[i][j] for j in range(n_tags)] +             # CHANGED: xrange → range
               ["%.3f" % (count[i][i] * 100. / max(1, count[i].sum()))])
-        )
+        ))
 
-    # Global accuracy
-    print "%i/%i (%.5f%%)" % (
+    print("%i/%i (%.5f%%)" % (                 # CHANGED: print()
         count.trace(), count.sum(), 100. * count.trace() / max(1, count.sum())
-    )
+    ))
 
-    # F1 on all entities
     return float(eval_lines[1].strip().split()[-1])
