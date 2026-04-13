@@ -1,13 +1,13 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
+# Modified by Satvik Somashekar - Python 3 port
 
 import os
 import numpy as np
-import optparse
+import argparse                          # CHANGED: optparse → argparse
 import itertools
 from collections import OrderedDict
 from utils import create_input
 import loader
-
 from utils import models_path, evaluate, eval_script, eval_temp
 from loader import word_mapping, char_mapping, tag_mapping
 from loader import update_tag_scheme, prepare_dataset
@@ -15,84 +15,27 @@ from loader import augment_with_pretrained
 from model import Model
 
 # Read parameters from command line
-optparser = optparse.OptionParser()
-optparser.add_option(
-    "-T", "--train", default="",
-    help="Train set location"
-)
-optparser.add_option(
-    "-d", "--dev", default="",
-    help="Dev set location"
-)
-optparser.add_option(
-    "-t", "--test", default="",
-    help="Test set location"
-)
-optparser.add_option(
-    "-s", "--tag_scheme", default="iobes",
-    help="Tagging scheme (IOB or IOBES)"
-)
-optparser.add_option(
-    "-l", "--lower", default="0",
-    type='int', help="Lowercase words (this will not affect character inputs)"
-)
-optparser.add_option(
-    "-z", "--zeros", default="0",
-    type='int', help="Replace digits with 0"
-)
-optparser.add_option(
-    "-c", "--char_dim", default="25",
-    type='int', help="Char embedding dimension"
-)
-optparser.add_option(
-    "-C", "--char_lstm_dim", default="25",
-    type='int', help="Char LSTM hidden layer size"
-)
-optparser.add_option(
-    "-b", "--char_bidirect", default="1",
-    type='int', help="Use a bidirectional LSTM for chars"
-)
-optparser.add_option(
-    "-w", "--word_dim", default="100",
-    type='int', help="Token embedding dimension"
-)
-optparser.add_option(
-    "-W", "--word_lstm_dim", default="100",
-    type='int', help="Token LSTM hidden layer size"
-)
-optparser.add_option(
-    "-B", "--word_bidirect", default="1",
-    type='int', help="Use a bidirectional LSTM for words"
-)
-optparser.add_option(
-    "-p", "--pre_emb", default="",
-    help="Location of pretrained embeddings"
-)
-optparser.add_option(
-    "-A", "--all_emb", default="0",
-    type='int', help="Load all embeddings"
-)
-optparser.add_option(
-    "-a", "--cap_dim", default="0",
-    type='int', help="Capitalization feature dimension (0 to disable)"
-)
-optparser.add_option(
-    "-f", "--crf", default="1",
-    type='int', help="Use CRF (0 to disable)"
-)
-optparser.add_option(
-    "-D", "--dropout", default="0.5",
-    type='float', help="Droupout on the input (0 = no dropout)"
-)
-optparser.add_option(
-    "-L", "--lr_method", default="sgd-lr_.005",
-    help="Learning method (SGD, Adadelta, Adam..)"
-)
-optparser.add_option(
-    "-r", "--reload", default="0",
-    type='int', help="Reload the last saved model"
-)
-opts = optparser.parse_args()[0]
+parser = argparse.ArgumentParser(description="NER Tagger Trainer")  # CHANGED
+parser.add_argument("-T", "--train", default="", help="Train set location")
+parser.add_argument("-d", "--dev", default="", help="Dev set location")
+parser.add_argument("-t", "--test", default="", help="Test set location")
+parser.add_argument("-s", "--tag_scheme", default="iobes", help="Tagging scheme (IOB or IOBES)")
+parser.add_argument("-l", "--lower", default=0, type=int, help="Lowercase words")
+parser.add_argument("-z", "--zeros", default=0, type=int, help="Replace digits with 0")
+parser.add_argument("-c", "--char_dim", default=25, type=int, help="Char embedding dimension")
+parser.add_argument("-C", "--char_lstm_dim", default=25, type=int, help="Char LSTM hidden layer size")
+parser.add_argument("-b", "--char_bidirect", default=1, type=int, help="Use bidirectional LSTM for chars")
+parser.add_argument("-w", "--word_dim", default=100, type=int, help="Token embedding dimension")
+parser.add_argument("-W", "--word_lstm_dim", default=100, type=int, help="Token LSTM hidden layer size")
+parser.add_argument("-B", "--word_bidirect", default=1, type=int, help="Use bidirectional LSTM for words")
+parser.add_argument("-p", "--pre_emb", default="", help="Location of pretrained embeddings")
+parser.add_argument("-A", "--all_emb", default=0, type=int, help="Load all embeddings")
+parser.add_argument("-a", "--cap_dim", default=0, type=int, help="Capitalization feature dimension")
+parser.add_argument("-f", "--crf", default=1, type=int, help="Use CRF (0 to disable)")
+parser.add_argument("-D", "--dropout", default=0.5, type=float, help="Dropout on the input")
+parser.add_argument("-L", "--lr_method", default="sgd-lr_.005", help="Learning method")
+parser.add_argument("-r", "--reload", default=0, type=int, help="Reload the last saved model")
+opts = parser.parse_args()
 
 # Parse parameters
 parameters = OrderedDict()
@@ -133,9 +76,8 @@ if not os.path.exists(models_path):
 
 # Initialize model
 model = Model(parameters=parameters, models_path=models_path)
-print "Model location: %s" % model.model_path
+print("Model location: %s" % model.model_path)   # CHANGED: print()
 
-# Data parameters
 lower = parameters['lower']
 zeros = parameters['zeros']
 tag_scheme = parameters['tag_scheme']
@@ -145,13 +87,12 @@ train_sentences = loader.load_sentences(opts.train, lower, zeros)
 dev_sentences = loader.load_sentences(opts.dev, lower, zeros)
 test_sentences = loader.load_sentences(opts.test, lower, zeros)
 
-# Use selected tagging scheme (IOB / IOBES)
+# Use selected tagging scheme
 update_tag_scheme(train_sentences, tag_scheme)
 update_tag_scheme(dev_sentences, tag_scheme)
 update_tag_scheme(test_sentences, tag_scheme)
 
-# Create a dictionary / mapping of words
-# If we use pretrained embeddings, we add them to the dictionary.
+# Word mappings
 if parameters['pre_emb']:
     dico_words_train = word_mapping(train_sentences, lower)[0]
     dico_words, word_to_id, id_to_word = augment_with_pretrained(
@@ -165,69 +106,57 @@ else:
     dico_words, word_to_id, id_to_word = word_mapping(train_sentences, lower)
     dico_words_train = dico_words
 
-# Create a dictionary and a mapping for words / POS tags / tags
 dico_chars, char_to_id, id_to_char = char_mapping(train_sentences)
 dico_tags, tag_to_id, id_to_tag = tag_mapping(train_sentences)
 
 # Index data
-train_data = prepare_dataset(
-    train_sentences, word_to_id, char_to_id, tag_to_id, lower
-)
-dev_data = prepare_dataset(
-    dev_sentences, word_to_id, char_to_id, tag_to_id, lower
-)
-test_data = prepare_dataset(
-    test_sentences, word_to_id, char_to_id, tag_to_id, lower
-)
+train_data = prepare_dataset(train_sentences, word_to_id, char_to_id, tag_to_id, lower)
+dev_data = prepare_dataset(dev_sentences, word_to_id, char_to_id, tag_to_id, lower)
+test_data = prepare_dataset(test_sentences, word_to_id, char_to_id, tag_to_id, lower)
 
-print "%i / %i / %i sentences in train / dev / test." % (
-    len(train_data), len(dev_data), len(test_data))
+print("%i / %i / %i sentences in train / dev / test." % (   # CHANGED: print()
+    len(train_data), len(dev_data), len(test_data)))
 
-# Save the mappings to disk
-print 'Saving the mappings to disk...'
+print('Saving the mappings to disk...')                       # CHANGED: print()
 model.save_mappings(id_to_word, id_to_char, id_to_tag)
 
-# Build the model
 f_train, f_eval = model.build(**parameters)
 
-# Reload previous model values
 if opts.reload:
-    print 'Reloading previous model...'
+    print('Reloading previous model...')                      # CHANGED: print()
     model.reload()
 
-#
 # Train network
-#
-singletons = set([word_to_id[k] for k, v
-                  in dico_words_train.items() if v == 1])
-n_epochs = 100  # number of epochs over the training set
-freq_eval = 1000  # evaluate on dev every freq_eval steps
+singletons = set([word_to_id[k] for k, v in dico_words_train.items() if v == 1])
+n_epochs = 100
+freq_eval = 1000
 best_dev = -np.inf
 best_test = -np.inf
 count = 0
-for epoch in xrange(n_epochs):
+
+for epoch in range(n_epochs):          # CHANGED: xrange → range (xrange removed in Python 3)
     epoch_costs = []
-    print "Starting epoch %i..." % epoch
+    print("Starting epoch %i..." % epoch)                    # CHANGED: print()
     for i, index in enumerate(np.random.permutation(len(train_data))):
         count += 1
         input = create_input(train_data[index], parameters, True, singletons)
         new_cost = f_train(*input)
         epoch_costs.append(new_cost)
-        if i % 50 == 0 and i > 0 == 0:
-            print "%i, cost average: %f" % (i, np.mean(epoch_costs[-50:]))
+        if i % 50 == 0 and i > 0:
+            print("%i, cost average: %f" % (i, np.mean(epoch_costs[-50:])))  # CHANGED
         if count % freq_eval == 0:
             dev_score = evaluate(parameters, f_eval, dev_sentences,
                                  dev_data, id_to_tag, dico_tags)
             test_score = evaluate(parameters, f_eval, test_sentences,
                                   test_data, id_to_tag, dico_tags)
-            print "Score on dev: %.5f" % dev_score
-            print "Score on test: %.5f" % test_score
+            print("Score on dev: %.5f" % dev_score)          # CHANGED: print()
+            print("Score on test: %.5f" % test_score)        # CHANGED: print()
             if dev_score > best_dev:
                 best_dev = dev_score
-                print "New best score on dev."
-                print "Saving model to disk..."
+                print("New best score on dev.")               # CHANGED: print()
+                print("Saving model to disk...")              # CHANGED: print()
                 model.save()
             if test_score > best_test:
                 best_test = test_score
-                print "New best score on test."
-    print "Epoch %i done. Average cost: %f" % (epoch, np.mean(epoch_costs))
+                print("New best score on test.")              # CHANGED: print()
+    print("Epoch %i done. Average cost: %f" % (epoch, np.mean(epoch_costs)))  # CHANGED
